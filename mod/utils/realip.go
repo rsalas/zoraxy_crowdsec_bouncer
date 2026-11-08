@@ -79,6 +79,12 @@ func GetRealIP(logger *logrus.Logger, dsfr *zoraxy_plugin.DynamicSniffForwardReq
 IPFound:
 	realIP = strings.TrimSpace(realIP)
 
+	// Newer Zoraxy versions provide the trusted-proxy resolved client IP in the
+	// sniff payload; prefer it over raw headers, which a client can spoof.
+	if dsfr.ClientIP != "" {
+		realIP = dsfr.ClientIP
+	}
+
 	// extract the IP address from what is potentially a host:port format
 	ip, _, err := net.SplitHostPort(realIP)
 	if err != nil {

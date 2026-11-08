@@ -62,12 +62,27 @@ func prefixFromDecision(decision *models.Decision) (netip.Prefix, bool) {
 	return prefix.Masked(), true
 }
 
+// typeWeight orders remediation strength: a ban must beat a captcha at equal
+// specificity, since it is the stricter remediation.
+func typeWeight(d *models.Decision) int {
+	if d != nil && d.Type != nil && strings.EqualFold(*d.Type, "ban") {
+		return 2
+	}
+	return 1
+}
+
 // better reports whether a should win over b at the same prefix: higher
-// specificity first, then higher ID.
+// specificity first, then stricter remediation type, then higher ID.
 func better(a, b *models.Decision, addr netip.Addr) bool {
 	aSpec, _ := decisionMatchSpecificity(a, addr)
 	bSpec, _ := decisionMatchSpecificity(b, addr)
-	return aSpec > bSpec || (aSpec == bSpec && a.ID > b.ID)
+	if aSpec != bSpec {
+		return aSpec > bSpec
+	}
+	if aw, bw := typeWeight(a), typeWeight(b); aw != bw {
+		return aw > bw
+	}
+	return a.ID > b.ID
 }
 
 // removeAt removes list[i] in place by swapping in the last element. Order is
@@ -159,7 +174,7 @@ func (c *Cache) Apply(update *models.DecisionsStreamResponse) {
 	}
 
 	for _, decision := range update.New {
-		if decision == nil || decision.Type == nil || !strings.EqualFold(*decision.Type, "ban") {
+		if decision == nil || decision.Type == nil || (!strings.EqualFold(*decision.Type, "ban") && !strings.EqualFold(*decision.Type, "captcha")) {
 			continue
 		}
 		if existing, ok := c.decisions[decision.ID]; ok {
@@ -168,6 +183,12 @@ func (c *Cache) Apply(update *models.DecisionsStreamResponse) {
 		c.decisions[decision.ID] = decision
 		c.index(decision)
 	}
+}
+
+// GetDecision returns the most specific matching IP or CIDR decision (ban or
+// captcha), if any.
+func (c *Cache) GetDecision(rawIP string) *models.Decision {
+	return c.GetBan(rawIP)
 }
 
 // GetBan returns the most specific matching IP or CIDR ban decision, if any.

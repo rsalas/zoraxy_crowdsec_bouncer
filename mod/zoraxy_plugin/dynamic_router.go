@@ -111,6 +111,7 @@ type DynamicSniffForwardRequest struct {
 	URL        string              `json:"url"`
 	Header     map[string][]string `json:"header"`
 	RemoteAddr string              `json:"remote_addr"`
+	ClientIP   string              `json:"client_ip"` //Trusted-proxy resolved client IP, if provided by Zoraxy
 	Host       string              `json:"host"`
 	RequestURI string              `json:"request_uri"`
 	Proto      string              `json:"proto"`

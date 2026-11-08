@@ -7,12 +7,16 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/AnthonyMichaelTDM/zoraxycrowdsecbouncer/mod/appsec"
+	"github.com/AnthonyMichaelTDM/zoraxycrowdsecbouncer/mod/captcha"
 	"github.com/AnthonyMichaelTDM/zoraxycrowdsecbouncer/mod/config"
 	"github.com/AnthonyMichaelTDM/zoraxycrowdsecbouncer/mod/decisions"
 	"github.com/AnthonyMichaelTDM/zoraxycrowdsecbouncer/mod/dynamiccapture"
 	"github.com/AnthonyMichaelTDM/zoraxycrowdsecbouncer/mod/info"
 	"github.com/AnthonyMichaelTDM/zoraxycrowdsecbouncer/mod/metrics"
+	"github.com/AnthonyMichaelTDM/zoraxycrowdsecbouncer/mod/relay"
 	"github.com/AnthonyMichaelTDM/zoraxycrowdsecbouncer/mod/utils"
 	"github.com/AnthonyMichaelTDM/zoraxycrowdsecbouncer/mod/web"
 	plugin "github.com/AnthonyMichaelTDM/zoraxycrowdsecbouncer/mod/zoraxy_plugin"
@@ -150,6 +154,50 @@ func main() {
 		startBouncer(g, ctx, pluginConfig, logger, decisionCache, metricsHandler)
 	}
 
+	// AppSec (WAF) checker. Inspects request URL and headers inline; body
+	// inspection additionally captures body-carrying requests and replays the
+	// clean ones back through Zoraxy.
+	var appsecChecker *appsec.Checker
+	var relayClient *relay.Client
+	var marker *relay.Marker
+	verdicts := dynamiccapture.NewVerdicts()
+	if pluginConfig.AppSecEnabled && !onboardingMode {
+		appsecChecker = appsec.NewChecker(
+			pluginConfig.AppSecURL,
+			pluginConfig.APIKey,
+			pluginConfig.AppSecTimeoutValue,
+			pluginConfig.AppSecFailOpen,
+		)
+		logger.Infof("AppSec inspection enabled, forwarding request metadata to %s", pluginConfig.AppSecURL)
+
+		if pluginConfig.AppSecInspectBody {
+			var err error
+			marker, err = relay.NewMarker()
+			if err != nil {
+				logger.Fatalf("unable to create relay marker: %v", err)
+			}
+			relayClient = relay.NewClient(pluginConfig.AppSecRelayURL, 30*time.Second)
+			logger.Infof("AppSec body inspection enabled, clean requests replayed via %s", pluginConfig.AppSecRelayURL)
+		}
+	}
+
+	// CAPTCHA remediation: CrowdSec "captcha" decisions serve a challenge
+	// instead of blocking outright.
+	var captchaManager *captcha.Manager
+	if pluginConfig.CaptchaEnabled && !onboardingMode {
+		var err error
+		captchaManager, err = captcha.New(
+			pluginConfig.CaptchaProvider,
+			pluginConfig.CaptchaSiteKey,
+			pluginConfig.CaptchaSecretKey,
+			pluginConfig.CaptchaSessionDurationVal,
+		)
+		if err != nil {
+			logger.Fatalf("unable to initialize captcha: %v", err)
+		}
+		logger.Infof("Captcha remediation enabled (%s)", pluginConfig.CaptchaProvider)
+	}
+
 	/*
 		Dynamic Captures
 
@@ -159,11 +207,14 @@ func main() {
 		We will also print the request information to the console for debugging purposes.
 	*/
 	pathRouter.RegisterDynamicSniffHandler("/d_sniff", http.DefaultServeMux, func(dsfr *plugin.DynamicSniffForwardRequest) plugin.SniffResult {
-		return dynamiccapture.SniffHandler(logger, metricsHandler, pluginConfig, dsfr, decisionCache)
+		return dynamiccapture.SniffHandler(logger, metricsHandler, pluginConfig, dsfr, decisionCache, appsecChecker, marker, verdicts, captchaManager)
 	})
 	pathRouter.RegisterDynamicCaptureHandle(info.DYNAMIC_CAPTURE_INGRESS, http.DefaultServeMux, func(w http.ResponseWriter, r *http.Request) {
-		dynamiccapture.CaptureHandler(logger, w, r)
+		dynamiccapture.CaptureHandler(logger, metricsHandler, appsecChecker, relayClient, marker, verdicts, captchaManager, pluginConfig.AppSecMaxBody, w, r)
 	})
+
+	// Config management API + built-in editor, served on the plugin UI path.
+	web.NewConfigAPI(logger, pluginConfig).Register(http.DefaultServeMux)
 
 	web.InitWebServer(logger, g, ctx, runtimeCfg.Port, configStatus)
 
