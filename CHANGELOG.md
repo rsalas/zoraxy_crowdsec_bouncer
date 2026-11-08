@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.3.0
+
+* feat(appsec): forward request URL and headers to the CrowdSec AppSec engine for in-band blocking of WAF rules
+* feat(appsec): inspect request bodies by capturing body-carrying requests, running the full AppSec check and replaying clean requests back through Zoraxy (HMAC-signed relay marker)
+* feat(decisions): support CrowdSec "captcha" decisions with Turnstile/hCaptcha challenge page, token verification and signed pass-cookie
+* feat: skip AppSec inspection for static assets (GET/HEAD without query string on configurable extensions)
+* feat(realip): prefer Zoraxy's trusted-proxy resolved ClientIP field when present
+* feat: correlate sniff and capture handlers per request via X-Zoraxy-RequestID
+
 ## v1.2.4
 
 * chore(deps): bump github.com/sirupsen/logrus from 1.9.4 to 1.10.2 by @dependabot[bot] in https://github.com/AnthonyMichaelTDM/zoraxy_crowdsec_bouncer/pull/46
