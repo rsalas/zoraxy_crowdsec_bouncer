@@ -21,20 +21,25 @@ small{color:#888;display:block}
 <button onclick="save()">Save</button>
 <div id="msg"></div>
 <script>
+const CSRF = __CSRF_TOKEN__;
 const BOOLS = ["is_proxied_behind_cloudflare","appsec_enabled","appsec_fail_open","appsec_inspect_body","static_bypass","captcha_enabled"];
+function msg(t){ document.getElementById("msg").textContent = t; }
 async function load(){
-  const r = await fetch("config");
-  const d = await r.json();
-  const f = document.getElementById("form");
-  f.innerHTML = "";
-  for (const [k,v] of Object.entries(d.config).sort()){
-    const row = document.createElement("div"); row.className="row";
-    const lab = document.createElement("label"); lab.textContent=k; row.appendChild(lab);
-    let inp;
-    if (BOOLS.includes(k)) { inp=document.createElement("input"); inp.type="checkbox"; inp.checked=!!v; }
-    else { inp=document.createElement("input"); inp.type=k.includes("key")||k.includes("secret")?"password":"text"; inp.value=(v===null?"":v); }
-    inp.id="f_"+k; row.appendChild(inp); f.appendChild(row);
-  }
+  try {
+    const r = await fetch("config",{headers:{"X-Zoraxy-Csrf":CSRF}});
+    const t = await r.text();
+    const d = JSON.parse(t);
+    const f = document.getElementById("form");
+    f.innerHTML = "";
+    for (const [k,v] of Object.entries(d.config).sort()){
+      const row = document.createElement("div"); row.className="row";
+      const lab = document.createElement("label"); lab.textContent=k; row.appendChild(lab);
+      let inp;
+      if (BOOLS.includes(k)) { inp=document.createElement("input"); inp.type="checkbox"; inp.checked=!!v; }
+      else { inp=document.createElement("input"); inp.type=k.includes("key")||k.includes("secret")?"password":"text"; inp.value=(v===null?"":v); }
+      inp.id="f_"+k; row.appendChild(inp); f.appendChild(row);
+    }
+  } catch(e) { msg("Error loading config: "+e); }
 }
 async function save(){
   const body={};
@@ -42,12 +47,16 @@ async function save(){
     const k=i.id.slice(2);
     body[k]= i.type==="checkbox" ? i.checked : (i.id==="f_appsec_max_body" ? parseInt(i.value||"0") : i.value);
   });
-  const r = await fetch("config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-  const d = await r.json();
-  document.getElementById("msg").textContent = d.saved
-    ? "Saved. Applied live: "+(d.applied_live||[]).join(", ")+
-      (d.restart_required&&d.restart_required.length?"\nRequires plugin restart: "+d.restart_required.join(", "):"")
-    : "Error: "+JSON.stringify(d);
+  try {
+    const r = await fetch("config",{method:"POST",headers:{"Content-Type":"application/json","X-Zoraxy-Csrf":CSRF},body:JSON.stringify(body)});
+    const t = await r.text();
+    let d;
+    try { d = JSON.parse(t); } catch(e) { d = {error:t||("HTTP "+r.status)}; }
+    msg(d.saved
+      ? "Saved. Applied live: "+(d.applied_live||[]).join(", ")+
+        (d.restart_required&&d.restart_required.length?"\nRequires plugin restart: "+d.restart_required.join(", "):"")
+      : "Error ("+r.status+"): "+(d.error||JSON.stringify(d)));
+  } catch(e) { msg("Error saving: "+e); }
 }
 load();
 </script></body></html>`

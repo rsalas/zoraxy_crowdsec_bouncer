@@ -41,7 +41,15 @@ func NewConfigAPI(logger *logrus.Logger, cfg *config.PluginConfig) *ConfigAPI {
 
 func (a *ConfigAPI) Register(mux *http.ServeMux) {
 	mux.HandleFunc(info.UI_PATH+"api/config", a.handle)
+	mux.HandleFunc(info.UI_PATH+"api/config/", a.handle)
 	mux.HandleFunc(info.UI_PATH+"api/config-editor", a.editor)
+	mux.HandleFunc(info.UI_PATH+"api/config-editor/", a.editor)
+}
+
+func writeJSONError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]interface{}{"saved": false, "error": msg})
 }
 
 func mask(v string) string {
@@ -71,12 +79,12 @@ func (a *ConfigAPI) get(w http.ResponseWriter) {
 	defer a.mu.Unlock()
 	raw, err := yaml.Marshal(a.cfg)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	var m map[string]interface{}
 	if err := yaml.Unmarshal(raw, &m); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	for f := range secretFields {
@@ -91,8 +99,16 @@ func (a *ConfigAPI) get(w http.ResponseWriter) {
 func (a *ConfigAPI) post(w http.ResponseWriter, r *http.Request) {
 	var updates map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
-		http.Error(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
+	}
+
+	// JSON numbers decode as float64; normalize integral values so the YAML
+	// we persist keeps integer form (e.g. appsec_max_body: 1048576).
+	for k, v := range updates {
+		if f, ok := v.(float64); ok && f == float64(int64(f)) {
+			updates[k] = int64(f)
+		}
 	}
 
 	a.mu.Lock()
@@ -101,7 +117,7 @@ func (a *ConfigAPI) post(w http.ResponseWriter, r *http.Request) {
 	// Serialize the current config to yaml, merge updates on top, re-validate.
 	raw, err := yaml.Marshal(a.cfg)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	var current map[string]interface{}
@@ -120,16 +136,16 @@ func (a *ConfigAPI) post(w http.ResponseWriter, r *http.Request) {
 	merged, _ := yaml.Marshal(current)
 	candidate := &config.PluginConfig{}
 	if err := yaml.Unmarshal(merged, candidate); err != nil {
-		http.Error(w, "invalid config values: "+err.Error(), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "invalid config values: "+err.Error())
 		return
 	}
 	if err := candidate.PostProcess(); err != nil {
-		http.Error(w, "invalid config: "+err.Error(), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "invalid config: "+err.Error())
 		return
 	}
 
 	if err := os.WriteFile(info.CONFIGURATION_FILE, merged, 0o600); err != nil {
-		http.Error(w, "cannot write config file: "+err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "cannot write config file: "+err.Error())
 		return
 	}
 
@@ -156,7 +172,16 @@ func (a *ConfigAPI) post(w http.ResponseWriter, r *http.Request) {
 }
 
 // editor serves a minimal built-in editor so the UI needs no external assets.
+// The X-Zoraxy-Csrf token Zoraxy attaches to proxied requests is injected into
+// the page so the editor can echo it back on POSTs (same convention as
+// {{.csrfToken}} in the embed UI templates).
 func (a *ConfigAPI) editor(w http.ResponseWriter, r *http.Request) {
+	csrf := r.Header.Get("X-Zoraxy-Csrf")
+	if csrf == "" {
+		csrf = "missing-csrf-token"
+	}
+	tokenJSON, _ := json.Marshal(csrf)
+	page := strings.Replace(editorPage, "__CSRF_TOKEN__", string(tokenJSON), 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(editorPage))
+	w.Write([]byte(page))
 }
