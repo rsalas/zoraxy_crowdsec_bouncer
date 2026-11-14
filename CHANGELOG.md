@@ -1,14 +1,18 @@
 # Changelog
 
+## v1.3.1
+
+* fix: improve config API error handling and CSRF token injection in the built-in editor
+* feat(appsec): skip all AppSec inspection for hostnames listed in `appsec_exempt_hosts` (ban/captcha decisions still apply)
+* feat: return `403 {"detail":...}` JSON to clients that accept `application/json`, so API frontends can render the block reason
+* chore(appsec): raise default `appsec_timeout` from 200ms to 500ms
+
 ## v1.3.0
 
 * feat(appsec): forward request URL and headers to the CrowdSec AppSec engine for in-band blocking of WAF rules
 * feat(appsec): inspect request bodies by capturing body-carrying requests, running the full AppSec check and replaying clean requests back through Zoraxy (HMAC-signed relay marker)
 * feat(decisions): support CrowdSec "captcha" decisions with Turnstile/hCaptcha challenge page, token verification and signed pass-cookie
 * feat: skip AppSec inspection for static assets (GET/HEAD without query string on configurable extensions)
-* feat(appsec): skip all AppSec inspection for hostnames listed in `appsec_exempt_hosts` (ban/captcha decisions still apply)
-* feat: return `403 {"detail":...}` JSON to clients that accept `application/json`, so API frontends can render the block reason
-* chore(appsec): raise default `appsec_timeout` from 200ms to 500ms
 * feat(realip): prefer Zoraxy's trusted-proxy resolved ClientIP field when present
 * feat: correlate sniff and capture handlers per request via X-Zoraxy-RequestID
 

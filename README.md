@@ -53,19 +53,19 @@ Create a directory for the plugin if it doesn't exist:
 mkdir -p /opt/zoraxy/plugins/zoraxycrowdsecbouncer
 ```
 
-Then, copy the link to the latest binary from the [releases page](https://github.com/AnthonyMichaelTDM/zoraxy_crowdsec_bouncer/releases) and use `wget` to download it to the `zoraxycrowdsecbouncer` directory:
+Then, copy the link to the latest binary from the [releases page](https://github.com/rsalas/zoraxy_crowdsec_bouncer/releases) and use `wget` to download it to the `zoraxycrowdsecbouncer` directory:
 
 ```bash
 cd /opt/zoraxy/plugins/zoraxycrowdsecbouncer
 # wget <LINK_TO_LATEST_BINARY>
-wget https://github.com/AnthonyMichaelTDM/zoraxy_crowdsec_bouncer/releases/download/v1.2.4/zoraxycrowdsecbouncer_linux_amd64 -O zoraxycrowdsecbouncer
+wget https://github.com/rsalas/zoraxy_crowdsec_bouncer/releases/download/v1.3.1/zoraxycrowdsecbouncer_linux_amd64 -O zoraxycrowdsecbouncer
 chmod +x zoraxycrowdsecbouncer
 ```
 
 Do the same for the `config.yaml` file:
 
 ```bash
-wget https://github.com/AnthonyMichaelTDM/zoraxy_crowdsec_bouncer/releases/download/v1.2.4/config.yaml
+wget https://github.com/rsalas/zoraxy_crowdsec_bouncer/releases/download/v1.3.1/config.yaml
 ```
 
 ### From Source
