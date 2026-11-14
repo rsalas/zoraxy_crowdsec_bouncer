@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -32,7 +33,7 @@ is_proxied_behind_cloudflare: true
 # handler, so body-based AppSec rules cannot match.
 appsec_enabled: false
 appsec_url: http://127.0.0.1:7422
-appsec_timeout: 200ms
+appsec_timeout: 500ms
 # If true, requests are allowed through when the AppSec engine is unreachable.
 appsec_fail_open: true
 # Inspect request bodies (POST/PUT): requests with a body are captured, sent
@@ -43,6 +44,9 @@ appsec_inspect_body: false
 appsec_relay_url: https://127.0.0.1
 # Max body bytes sent to the AppSec engine (the full body is always relayed).
 appsec_max_body: 1048576
+# Skip AppSec inspection entirely for these hostnames (comma-separated, exact
+# match, case-insensitive, port stripped). Ban/captcha decisions still apply.
+appsec_exempt_hosts: ""
 # Skip AppSec inspection for static assets: GET/HEAD requests without query
 # string whose path ends in one of these extensions. Ban decisions still apply.
 static_bypass: true
@@ -69,6 +73,7 @@ type PluginConfig struct {
 	AppSecInspectBody         bool   `yaml:"appsec_inspect_body"`
 	AppSecRelayURL            string `yaml:"appsec_relay_url"`
 	AppSecMaxBody             int64  `yaml:"appsec_max_body"`
+	AppSecExemptHosts         string `yaml:"appsec_exempt_hosts"`
 	StaticBypass              bool   `yaml:"static_bypass"`
 	StaticExtensions          string `yaml:"static_extensions"`
 	CaptchaEnabled            bool   `yaml:"captcha_enabled"`
@@ -79,8 +84,22 @@ type PluginConfig struct {
 
 	LogLevel                  logrus.Level    `yaml:"-"`
 	AppSecTimeoutValue        time.Duration   `yaml:"-"`
+	AppSecExemptHostSet       map[string]bool `yaml:"-"`
 	StaticExtSet              map[string]bool `yaml:"-"`
 	CaptchaSessionDurationVal time.Duration   `yaml:"-"`
+}
+
+// AppSecExempt reports whether host (which may carry a port) is exempt from
+// AppSec inspection. Matching is exact and case-insensitive.
+func (p *PluginConfig) AppSecExempt(host string) bool {
+	if len(p.AppSecExemptHostSet) == 0 {
+		return false
+	}
+	h := strings.ToLower(host)
+	if hostOnly, _, err := net.SplitHostPort(h); err == nil {
+		h = hostOnly
+	}
+	return p.AppSecExemptHostSet[h]
 }
 
 func (p *PluginConfig) MissingRequiredFields() []string {
@@ -121,7 +140,7 @@ func (p *PluginConfig) PostProcess() error {
 	}
 
 	if p.AppSecTimeout == "" {
-		p.AppSecTimeout = "200ms"
+		p.AppSecTimeout = "500ms"
 	}
 	timeout, err := time.ParseDuration(p.AppSecTimeout)
 	if err != nil {
@@ -137,6 +156,14 @@ func (p *PluginConfig) PostProcess() error {
 	}
 	if p.AppSecMaxBody <= 0 {
 		p.AppSecMaxBody = 1048576
+	}
+
+	p.AppSecExemptHostSet = make(map[string]bool)
+	for _, h := range strings.Split(p.AppSecExemptHosts, ",") {
+		h = strings.TrimSpace(strings.ToLower(h))
+		if h != "" {
+			p.AppSecExemptHostSet[h] = true
+		}
 	}
 
 	if p.StaticExtensions == "" {

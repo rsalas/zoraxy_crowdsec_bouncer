@@ -105,19 +105,26 @@ func SniffHandler(logger *logrus.Logger, metricsHandler *metrics.MetricsHandler,
 	}
 	logger.Debugf("No decision found for IP: %s", ip)
 
-	// 3. Static assets: GET/HEAD without query string to a known static
+	// 3. AppSec-exempt hosts skip all AppSec inspection, both the inline check
+	// and the body-capture path (ban/captcha decisions above still apply).
+	if config.AppSecExempt(dsfr.Host) {
+		logger.Debugf("skipping AppSec inspection for exempt host %s", dsfr.Host)
+		return plugin.SniffResultSkip
+	}
+
+	// 4. Static assets: GET/HEAD without query string to a known static
 	// extension skip AppSec entirely (bans were already checked above).
 	if config.StaticBypass && isStaticAsset(dsfr, config.StaticExtSet) {
 		return plugin.SniffResultSkip
 	}
 
-	// 4. Body inspection path: capture so the ingress handler sees the body.
+	// 5. Body inspection path: capture so the ingress handler sees the body.
 	if config.AppSecInspectBody && hasBody(dsfr) {
 		verdicts.Set(dsfr.GetRequestUUID(), VerdictInspect)
 		return plugin.SniffResultAccept
 	}
 
-	// 5. Cheap AppSec check on URL + headers for bodiless requests.
+	// 6. Cheap AppSec check on URL + headers for bodiless requests.
 	if appsecChecker != nil {
 		blocked, err := appsecChecker.Check(context.Background(), dsfr.Method, dsfr.RequestURI, dsfr.Host, dsfr.Header, nil, ip)
 		switch {

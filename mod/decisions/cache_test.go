@@ -40,10 +40,16 @@ func TestCacheIgnoresNonBanAndInvalidDecisions(t *testing.T) {
 	cache.Apply(&models.DecisionsStreamResponse{New: []*models.Decision{
 		decision(1, "ip", "203.0.113.10", "captcha"),
 		decision(2, "ip", "not-an-ip", "ban"),
+		decision(3, "ip", "203.0.113.20", "throttled"),
 	}})
 
-	if got := cache.GetBan("203.0.113.10"); got != nil {
-		t.Fatalf("expected no matching ban, got %#v", got)
+	// captcha decisions are indexed: the sniff handler serves a challenge for them
+	if got := cache.GetBan("203.0.113.10"); got == nil {
+		t.Fatal("expected captcha decision to be indexed")
+	}
+	// unsupported remediation types are dropped
+	if got := cache.GetBan("203.0.113.20"); got != nil {
+		t.Fatalf("expected throttled decision to be ignored, got %#v", got)
 	}
 }
 

@@ -274,7 +274,9 @@ docker compose down
 
 This fork adds optional CrowdSec AppSec inspection on top of IP-decision blocking:
 
-- `appsec_enabled`, `appsec_url`, `appsec_timeout`, `appsec_fail_open`: forward request method+URI+headers+client IP to the AppSec engine (`:7422`); a 403 from the engine blocks the request in-band.
+- `appsec_enabled`, `appsec_url`, `appsec_timeout` (default 500ms), `appsec_fail_open`: forward request method+URI+headers+client IP to the AppSec engine (`:7422`); a 403 from the engine blocks the request in-band.
 - `appsec_inspect_body`, `appsec_relay_url`, `appsec_max_body`: requests carrying a body are captured, fully sent to AppSec, and clean ones replayed back to the Zoraxy listener with an HMAC-signed `X-Zcsb-Relay` marker so upstream routing still applies. Requires `127.0.0.1` in Zoraxy's trusted proxies (keeps the real client IP via X-Forwarded-For).
+- `appsec_exempt_hosts`: comma-separated hostnames that skip AppSec inspection entirely (exact match, case-insensitive, port stripped). Useful for latency-sensitive or false-positive-prone apps like an IdP. Ban/captcha decisions still apply.
 - `static_bypass`, `static_extensions`: GET/HEAD requests without query string on known static extensions skip AppSec entirely.
+- Blocked responses are content-negotiated: clients that send `Accept: application/json` get `403 {"detail":"..."}` so API frontends (e.g. authentik) can render the reason instead of a generic error.
 - `captcha_enabled`, `captcha_provider` (turnstile|hcaptcha), `captcha_site_key`, `captcha_secret_key`, `captcha_session_duration`: CrowdSec `captcha` decisions render a challenge page; solving it sets a signed cookie.

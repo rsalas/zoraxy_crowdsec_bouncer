@@ -24,7 +24,8 @@ var secretFields = map[string]string{
 // plugin restart (components were built at boot).
 var hotFields = map[string]bool{
 	"appsec_inspect_body": true, "appsec_fail_open": true, "appsec_max_body": true,
-	"static_bypass": true, "static_extensions": true, "log_level": true,
+	"appsec_exempt_hosts": true,
+	"static_bypass":       true, "static_extensions": true, "log_level": true,
 	"is_proxied_behind_cloudflare": true, "appsec_enabled": false,
 }
 

@@ -94,3 +94,37 @@ func TestMissingRequiredFields(t *testing.T) {
 		})
 	}
 }
+
+func TestAppSecExempt(t *testing.T) {
+	cfg := PluginConfig{AppSecExemptHosts: " Auth.Example.com ,idp.example.org ,,"}
+	if err := cfg.PostProcess(); err != nil {
+		t.Fatalf("PostProcess() error = %v", err)
+	}
+
+	tests := []struct {
+		host string
+		want bool
+	}{
+		{"auth.example.com", true},
+		{"AUTH.EXAMPLE.COM", true},
+		{"auth.example.com:443", true},
+		{"idp.example.org", true},
+		{"idp.example.org:8443", true},
+		{"other.example.com", false},
+		{"sub.auth.example.com", false},
+		{"", false},
+	}
+	for _, tc := range tests {
+		if got := cfg.AppSecExempt(tc.host); got != tc.want {
+			t.Errorf("AppSecExempt(%q) = %v, want %v", tc.host, got, tc.want)
+		}
+	}
+
+	empty := PluginConfig{}
+	if err := empty.PostProcess(); err != nil {
+		t.Fatalf("PostProcess() error = %v", err)
+	}
+	if empty.AppSecExempt("auth.example.com") {
+		t.Error("AppSecExempt on empty list should be false")
+	}
+}

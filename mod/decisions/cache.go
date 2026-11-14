@@ -191,7 +191,8 @@ func (c *Cache) GetDecision(rawIP string) *models.Decision {
 	return c.GetBan(rawIP)
 }
 
-// GetBan returns the most specific matching IP or CIDR ban decision, if any.
+// GetBan returns the most specific matching IP or CIDR decision (ban or
+// captcha), if any.
 func (c *Cache) GetBan(rawIP string) *models.Decision {
 	ip, err := netip.ParseAddr(rawIP)
 	if err != nil {

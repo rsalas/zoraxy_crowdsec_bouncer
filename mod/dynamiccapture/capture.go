@@ -3,12 +3,14 @@ package dynamiccapture
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"html"
 	"io"
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/AnthonyMichaelTDM/zoraxycrowdsecbouncer/mod/appsec"
 	"github.com/AnthonyMichaelTDM/zoraxycrowdsecbouncer/mod/captcha"
@@ -40,7 +42,7 @@ func CaptureHandler(logger *logrus.Logger, metricsHandler *metrics.MetricsHandle
 
 	if verdict == VerdictBlock {
 		logger.Infof("Request blocked: %s %s", r.Method, r.RequestURI)
-		forbidden(w)
+		forbidden(w, r)
 		return
 	}
 
@@ -52,7 +54,7 @@ func CaptureHandler(logger *logrus.Logger, metricsHandler *metrics.MetricsHandle
 	// VerdictInspect: full AppSec check with body.
 	if appsecChecker == nil || relayClient == nil || marker == nil {
 		logger.Warn("body inspection requested but relay/appsec not configured")
-		forbidden(w)
+		forbidden(w, r)
 		return
 	}
 
@@ -63,7 +65,7 @@ func CaptureHandler(logger *logrus.Logger, metricsHandler *metrics.MetricsHandle
 	inspectBytes, err := io.ReadAll(io.LimitReader(r.Body, maxInspectBody))
 	if err != nil {
 		logger.Warnf("unable to read request body for inspection: %v", err)
-		forbidden(w)
+		forbidden(w, r)
 		return
 	}
 
@@ -72,14 +74,14 @@ func CaptureHandler(logger *logrus.Logger, metricsHandler *metrics.MetricsHandle
 	case err != nil:
 		if !appsecChecker.FailOpen() {
 			logger.Errorf("AppSec body check failed, blocking request (fail-closed): %v", err)
-			forbidden(w)
+			forbidden(w, r)
 			return
 		}
 		logger.Warnf("AppSec body check failed, relaying uninspected (fail-open): %v", err)
 	case blocked:
 		logger.Infof("AppSec blocked request with body: %s %s from %s", r.Method, r.RequestURI, ip)
 		metricsHandler.MarkRequestDropped(r.Host, ingressAppsecDecision)
-		forbidden(w)
+		forbidden(w, r)
 		return
 	}
 
@@ -119,7 +121,7 @@ func ingressClientIP(r *http.Request) string {
 func handleCaptcha(logger *logrus.Logger, captchaManager *captcha.Manager, w http.ResponseWriter, r *http.Request) {
 	if captchaManager == nil {
 		logger.Warn("captcha verdict received but captcha is not configured")
-		forbidden(w)
+		forbidden(w, r)
 		return
 	}
 
@@ -152,7 +154,16 @@ func handleCaptcha(logger *logrus.Logger, captchaManager *captcha.Manager, w htt
 	captchaManager.ServeChallenge(w)
 }
 
-func forbidden(w http.ResponseWriter) {
+// forbidden replies 403. API clients that accept JSON get a machine-readable
+// body with a "detail" field (frontends like authentik render it); anything
+// else gets the plain-text response.
+func forbidden(w http.ResponseWriter, r *http.Request) {
+	if strings.Contains(r.Header.Get("Accept"), "application/json") {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"detail": "request blocked by CrowdSec"})
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusForbidden)
 	w.Write([]byte("Forbidden"))
