@@ -29,8 +29,6 @@ log_level: warning
 # Set to true if zoraxy is proxied behind Cloudflare
 is_proxied_behind_cloudflare: true
 # CrowdSec AppSec (WAF) inspection of request URL and headers.
-# NOTE: Zoraxy's plugin API does not expose the request body to the sniff
-# handler, so body-based AppSec rules cannot match.
 appsec_enabled: false
 appsec_url: http://127.0.0.1:7422
 appsec_timeout: 500ms

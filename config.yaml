@@ -7,3 +7,31 @@ stream_update_frequency: 10s
 log_level: warning
 # Set to true if zoraxy is proxied behind Cloudflare
 is_proxied_behind_cloudflare: true
+# CrowdSec AppSec (WAF) inspection of request URL and headers.
+#appsec_enabled: false
+#appsec_url: http://127.0.0.1:7422
+#appsec_timeout: 500ms
+# If true, requests are allowed through when the AppSec engine is unreachable.
+#appsec_fail_open: true
+# Inspect request bodies (POST/PUT): requests with a body are captured, sent
+# fully to AppSec, and clean ones replayed back through Zoraxy so upstream
+# routing, vdirs and load balancing still apply.
+#appsec_inspect_body: false
+# Zoraxy listener where inspected requests are replayed.
+#appsec_relay_url: https://127.0.0.1
+# Max body bytes sent to the AppSec engine (the full body is always relayed).
+#appsec_max_body: 1048576
+# Skip AppSec inspection entirely for these hostnames (comma-separated, exact
+# match, case-insensitive, port stripped). Ban/captcha decisions still apply.
+#appsec_exempt_hosts: ""
+# Skip AppSec inspection for static assets: GET/HEAD requests without query
+# string whose path ends in one of these extensions. Ban decisions still apply.
+#static_bypass: true
+#static_extensions: .css,.js,.mjs,.map,.png,.jpg,.jpeg,.gif,.svg,.ico,.webp,.avif,.woff,.woff2,.ttf,.eot,.otf,.mp4,.webm,.mp3,.wav,.ogg,.flac,.pdf,.txt
+# CAPTCHA remediation: CrowdSec "captcha" decisions serve a challenge instead
+# of blocking. Requires a Turnstile or hCaptcha site key + secret key.
+#captcha_enabled: false
+#captcha_provider: turnstile
+#captcha_site_key: ""
+#captcha_secret_key: ""
+#captcha_session_duration: 4h
